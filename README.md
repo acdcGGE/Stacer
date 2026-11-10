@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/QuentiumYT/Stacer/HEAD/screenshots/header.png" width="800">    
+    <img src="https://raw.githubusercontent.com/QuentiumYT/Stacer/HEAD/screenshots/header.png" width="800">
 </p>
 
 <h2 align="center">Linux System Optimizer and Monitoring</h2>
@@ -29,16 +29,16 @@
 ## Reviews
 
 <p align="left">
-    <a href="https://www.omgubuntu.co.uk/2017/01/stacer-system-optimizer-for-ubuntu">
-		<img width="64px" src="https://149366088.v2.pressablecdn.com/wp-content/themes/omgubuntu-theme-2022_04_0/images/favicons/favicon-192x192.png"/>
-	</a>        
+    <a href="https://www.omgubuntu.co.uk/2019/05/stacer-system-cleaner-ubuntu">
+		<img width="64px" src="https://www.omgubuntu.co.uk/omg-assets/logo-512x512.png"/>
+	</a>
     <a href="https://diolinux.com.br/sistemas-operacionais/ubuntu/stacer-um-programa-para-otimizar-o-ubuntu.html">
 		<img width="64px" src="https://diolinux.com.br/wp-content/uploads/2021/05/diolinux-logo.png"/>
-	</a>    
-    <a href="https://www.dobreprogramy.pl/stacer-program-do-optymalizacji-ubuntu-ktory-wyglada-jakby-uciekl-z-windowsa,6628400543275137a">
-		<img width="64px" src="https://www.dobreprogramy.pl/resources/icons/icon.png"/>
 	</a>
-    <a href="hhttps://blog.desdelinux.net/optimizar-debian-ubuntu-linux-mint-derivados-stacer/">
+    <a href="https://www.dobreprogramy.pl/stacer-program-do-optymalizacji-ubuntu-ktory-wyglada-jakby-uciekl-z-windowsa,6628400543275137a">
+		<img width="64px" src="https://www.dobreprogramy.pl/staticfiles/icons/icon.png"/>
+	</a>
+    <a href="https://blog.desdelinux.net/optimizar-debian-ubuntu-linux-mint-derivados-stacer/">
 		<img width="64px" src="https://blog.desdelinux.net/wp-content/uploads/2018/04/cropped-desdelinux.png"/>
 	</a>
 	<a href="https://www.techrepublic.com/article/how-to-install-stacer-for-quick-linux-system-optimization/">
