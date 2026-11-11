@@ -235,9 +235,7 @@ evidence/                   before/after JSON、gdb 栈、最小复现记录、�
 
 `.deps/`、`.cache/`、`dist/`、`.packaging/` 均在 `.gitignore` 中，不入库。
 
-## 许可证
 
-上游 Stacer 为 **GPL-3.0**（见上游仓库根目录 `LICENSE`）。本仓库的 `patches/` 是对上游源码的修改，按 GPL-3.0 发布；构建脚本、打包配方、自检脚本与验证证据同样沿用 GPL-3.0。若作为上游仓库的子目录合并，沿用仓库根 `LICENSE` 即可，无需额外文件；若独立发布为单独仓库，请把上游 `LICENSE` 复制到新仓库根目录。
 
 ## 已知限制
 
