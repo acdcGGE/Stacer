@@ -1,0 +1,16 @@
+{
+  "kernel": "6.18.48-loong64-desktop-rolling",
+  "machine": "loongarch64",
+  "os": "Deepin 25",
+  "dpkgArchitecture": "loong64",
+  "triplet": "loongarch64-linux-gnu",
+  "gcc": "gcc (Deepin 12.3.0-17deepin19) 12.3.0",
+  "cmake": "cmake version 3.31.4",
+  "qmake": "Using Qt version 6.8.0 (/usr/lib/loongarch64-linux-gnu)",
+  "qtCore": "6.8.0+dfsg-0deepin42",
+  "qtSvg": "6.8.0-0deepin6",
+  "qtChartsStaged": "6.8.0-0deepin (apt download, local staging)",
+  "cpuModel": "Loongson-3A5000",
+  "cpuMhzField": "2300.00",
+  "qmakeBinary": "qmake6 (qt6-base-dev-tools 6.8.0+dfsg-0deepin42)"
+}

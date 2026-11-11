@@ -1,0 +1,34 @@
+Thread 1 "stacer" received signal SIGABRT, Aborted.
+0x00007ffff5afd804 in ?? () from /lib/loongarch64-linux-gnu/libc.so.6
+#0  0x00007ffff5afd804 in ?? () from /lib/loongarch64-linux-gnu/libc.so.6
+#1  0x00007ffff5aa9024 in raise () from /lib/loongarch64-linux-gnu/libc.so.6
+#2  0x00007ffff5a901d4 in abort () from /lib/loongarch64-linux-gnu/libc.so.6
+#3  0x00007ffff5aee0e0 in ?? () from /lib/loongarch64-linux-gnu/libc.so.6
+#4  0x00007ffff5b0bbc8 in ?? () from /lib/loongarch64-linux-gnu/libc.so.6
+#5  0x00007ffff5b11cdc in realloc () from /lib/loongarch64-linux-gnu/libc.so.6
+#6  0x00007ffff6049f0c in QArrayData::reallocateUnaligned(QArrayData*, void*, long long, long long, QArrayData::AllocationOption) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#7  0x00007ffff7cc25c4 in ?? () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#8  0x00007ffff7cc289c in ?? () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#9  0x00007ffff7cc1494 in QSvgTransformStyle::apply(QPainter*, QSvgNode const*, QSvgExtraStates&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#10 0x00007ffff7cc09b0 in QSvgStyle::apply(QPainter*, QSvgNode const*, QSvgExtraStates&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#11 0x00007ffff7ca9610 in QSvgNode::draw(QPainter*, QSvgExtraStates&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#12 0x00007ffff7cb3728 in QSvgG::drawCommand(QPainter*, QSvgExtraStates&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#13 0x00007ffff7ca965c in QSvgNode::draw(QPainter*, QSvgExtraStates&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#14 0x00007ffff7cc6744 in QSvgTinyDocument::draw(QPainter*, QRectF const&) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#15 0x00007ffff7cc689c in QSvgTinyDocument::draw(QPainter*) () from /lib/loongarch64-linux-gnu/libQt6Svg.so.6
+#16 0x00005555555f61c8 in SystemCleanerPage::renderScanner() ()
+#17 0x00007ffff5f87b74 in ?? () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#18 0x00007ffff5f87b74 in ?? () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#19 0x00007ffff5f8d1e8 in QTimer::timeout(QTimer::QPrivateSignal) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#20 0x00007ffff5f723cc in QObject::event(QEvent*) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#21 0x00007ffff6fec694 in QApplicationPrivate::notify_helper(QObject*, QEvent*) () from /lib/loongarch64-linux-gnu/libQt6Widgets.so.6
+#22 0x00007ffff5f15eac in QCoreApplication::notifyInternal2(QObject*, QEvent*) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#23 0x00007ffff60ad738 in QTimerInfoList::activateTimers() () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#24 0x00007ffff61a31c4 in ?? () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#25 0x00007ffff5493c60 in ?? () from /lib/loongarch64-linux-gnu/libglib-2.0.so.0
+#26 0x00007ffff5496998 in ?? () from /lib/loongarch64-linux-gnu/libglib-2.0.so.0
+#27 0x00007ffff5497438 in g_main_context_iteration () from /lib/loongarch64-linux-gnu/libglib-2.0.so.0
+#28 0x00007ffff619fd14 in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#29 0x00007ffff5f229cc in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#30 0x00007ffff5f1a630 in QCoreApplication::exec() () from /lib/loongarch64-linux-gnu/libQt6Core.so.6
+#31 0x0000555555580338 in main ()

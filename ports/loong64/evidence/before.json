@@ -1,0 +1,21 @@
+{
+    "avgClockMHz": 0,
+    "clockCount": 0,
+    "clocksMHz": [
+    ],
+    "cpuPercents": [
+        7,
+        7,
+        7,
+        7,
+        8
+    ],
+    "logicalCoreCount": 4,
+    "physicalCoreCount": 0,
+    "sysCpuCore": "0",
+    "sysCpuModel": "Loongson-3A5000",
+    "sysCpuSpeed": "unknown",
+    "sysDistribution": "Deepin 25",
+    "sysKernel": "6.18.48-loong64-desktop-rolling",
+    "sysPlatform": "linux loongarch64"
+}

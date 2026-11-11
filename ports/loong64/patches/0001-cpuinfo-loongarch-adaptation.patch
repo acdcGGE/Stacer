@@ -1,0 +1,118 @@
+diff --git a/stacer-core/Info/cpu_info.cpp b/stacer-core/Info/cpu_info.cpp
+index af06773..3f396d5 100644
+--- a/stacer-core/Info/cpu_info.cpp
++++ b/stacer-core/Info/cpu_info.cpp
+@@ -14,22 +14,50 @@ int CpuInfo::getCpuPhysicalCoreCount() const
+             QSet<QPair<int, int>> physicalCoreSet;
+             int physical = 0;
+             int core = 0;
++            bool hasTopology = false;
+             for (const QString &line : cpuinfo) {
+-                if (line.startsWith("physical id")) {
++                // x86 uses "physical id"/"core id"; LoongArch (and some ARM)
++                // kernels use "package"/"core" instead.
++                if (line.startsWith("physical id") || line.startsWith("package")) {
+                     QStringList fields = line.split(": ");
+                     if (fields.size() > 1)
+-                        physical = fields[1].toInt();
++                        physical = fields[1].trimmed().toInt();
+                 }
+-                if (line.startsWith("core id")) {
++                if (line.startsWith("core id") || line.startsWith("core")) {
+                     QStringList fields = line.split(": ");
+                     if (fields.size() > 1)
+-                        core = fields[1].toInt();
+-                    // We assume core id appears after physical id
++                        core = fields[1].trimmed().toInt();
++                    // We assume the core line appears after the package line
+                     physicalCoreSet.insert(qMakePair(physical, core));
++                    hasTopology = true;
+                 }
+             }
+-            count = physicalCoreSet.size();
++            if (hasTopology)
++                count = physicalCoreSet.size();
+         }
++
++        // Fallback when /proc/cpuinfo has no topology fields at all:
++        // use lscpu's socket layout, then the logical CPU count.
++        if (!count) {
++            try {
++                const QStringList lscpu = CommandUtil::exec("bash", { "-c", LSCPU_COMMAND }).split('\n');
++                int sockets = 0;
++                int coresPerSocket = 0;
++                for (const QString &line : lscpu) {
++                    if (line.startsWith("Socket(s)"))
++                        sockets = line.split(":").last().trimmed().toInt();
++                    else if (line.startsWith("Core(s) per socket"))
++                        coresPerSocket = line.split(":").last().trimmed().toInt();
++                }
++                if (sockets > 0 && coresPerSocket > 0)
++                    count = sockets * coresPerSocket;
++            } catch (const QString &) {
++                // lscpu unavailable, handled by the fallback below
++            }
++        }
++
++        if (!count)
++            count = getCpuCoreCount();
+     }
+ 
+     return count;
+@@ -37,7 +65,9 @@ int CpuInfo::getCpuPhysicalCoreCount() const
+ 
+ int CpuInfo::getCpuCoreCount() const
+ {
+-    static quint8 count = 0;
++    // int, not quint8: machines with more than 255 logical CPUs would wrap,
++    // and getCpuPercent() sizes its static vectors from this value.
++    static int count = 0;
+ 
+     if (!count) {
+         QStringList cpuinfo = FileUtil::readListFromFile(PROC_CPUINFO);
+@@ -80,7 +110,7 @@ double CpuInfo::getAvgClock() const
+     } else {
+         // fallback to /proc/cpuinfo (no frequency in lscpu)
+         QStringList lines = FileUtil::readListFromFile(PROC_CPUINFO)
+-                                .filter(QRegularExpression("^cpu MHz"));
++                                .filter(QRegularExpression(PROC_CPUINFO_CLOCK_LINE));
+         if (!lines.isEmpty()) {
+             double totalClock = 0.0;
+             for (const QString &line : lines) {
+@@ -96,7 +126,7 @@ double CpuInfo::getAvgClock() const
+ QList<double> CpuInfo::getClocks() const
+ {
+     QStringList lines = FileUtil::readListFromFile(PROC_CPUINFO)
+-                            .filter(QRegularExpression("^cpu MHz"));
++                            .filter(QRegularExpression(PROC_CPUINFO_CLOCK_LINE));
+ 
+     QList<double> clocks;
+     for (const QString &line : lines) {
+diff --git a/stacer-core/Info/cpu_info.h b/stacer-core/Info/cpu_info.h
+index bb973f2..eca998b 100644
+--- a/stacer-core/Info/cpu_info.h
++++ b/stacer-core/Info/cpu_info.h
+@@ -10,6 +10,10 @@
+ #define PROC_LOADAVG "/proc/loadavg"
+ #define PROC_STAT "/proc/stat"
+ 
++// x86 kernels expose "cpu MHz", LoongArch kernels expose "CPU MHz".
++// Keep the match case-insensitive on the "cpu" prefix so both work.
++#define PROC_CPUINFO_CLOCK_LINE "^[Cc][Pp][Uu] MHz"
++
+ class STACERCORESHARED_EXPORT CpuInfo
+ {
+   public:
+diff --git a/stacer-core/Info/system_info.cpp b/stacer-core/Info/system_info.cpp
+index 5918ffc..2d136d9 100644
+--- a/stacer-core/Info/system_info.cpp
++++ b/stacer-core/Info/system_info.cpp
+@@ -27,7 +27,7 @@ SystemInfo::SystemInfo()
+         if (filterSpeed.isEmpty()) {
+             // fallback to /proc/cpuinfo (no frequency in lscpu)
+             filterSpeed = FileUtil::readListFromFile(PROC_CPUINFO)
+-                              .filter(QRegularExpression("^cpu MHz"));
++                              .filter(QRegularExpression(PROC_CPUINFO_CLOCK_LINE));
+         }
+         QString speedLine = filterSpeed.isEmpty() ? "error: unknown" : filterSpeed.first();
+ 

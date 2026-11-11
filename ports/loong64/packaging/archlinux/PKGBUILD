@@ -1,0 +1,71 @@
+# PKGBUILD for the Stacer loong64 / multi-distro port.
+#
+# Build from inside this repository (patches are read from ../../patches at
+# prepare() time, so they never drift out of sync with the main port):
+#
+#   cd packaging/archlinux
+#   makepkg -s                    # -> stacer-1.8.0-1-<CARCH>.pkg.tar.zst
+#   makepkg --printsrcinfo > .SRCINFO   # for the AUR
+#
+# Works on Arch Linux, Arch Linux Loong64, Manjaro, EndeavourOS, ... as long
+# as the Qt6 packages below are available. Qt >= 6.9 keeps the animated SVG
+# loaders; Qt 6.8 automatically falls back to a static frame (see patch 0002).
+#
+# If your system already ships an AUR package named "stacer", rename pkgname
+# or add it to conflicts/provides as appropriate.
+
+pkgname=stacer
+_pkgname=Stacer
+pkgver=1.8.0
+pkgrel=1
+pkgdesc="Linux system optimizer and monitoring (port with LoongArch CPU-info and QtSvg fixes)"
+arch=('loong64' 'x86_64' 'aarch64')
+url="https://github.com/acdcGGE/Stacer"
+license=('GPL-3.0-or-later')
+depends=('qt6-base' 'qt6-charts' 'qt6-svg' 'hicolor-icon-theme')
+optdepends=(
+  'qt6-wayland: Wayland session support'
+  'systemd: manage system services'
+  'curl: feedback helper'
+  'polkit: privileged cleanup actions'
+)
+makedepends=('cmake' 'qt6-tools' 'patch')
+_commit=fab4e5ee57db9ba08ee69a222aa60434e9e1276e
+source=("$_pkgname-$_commit.tar.gz::https://github.com/acdcGGE/Stacer/archive/$_commit.tar.gz")
+# Verified 2026-11-11. If GitHub ever regenerates this archive and the
+# checksum no longer matches, replace with 'SKIP' and re-verify the commit.
+sha256sums=('c254152b1ea8c0848572be0ea23c1c9003e9f716cc74a53f057f9faa2aef5f61')
+options=('!debug')
+
+prepare() {
+    cd "$srcdir/$_pkgname-$_commit"
+    local patchdir="$startdir/../../patches"
+    [[ -d "$patchdir" ]] || {
+        echo "ERROR: $patchdir not found. Run makepkg from inside the port repository." >&2
+        return 1
+    }
+    local p
+    for p in "$patchdir"/*.patch; do
+        # Upstream .gitattributes marks "debian export-ignore", so GitHub
+        # source archives contain no debian/control. Patch 0003 is Debian-only
+        # and irrelevant on Arch; skip it when the file is absent.
+        if [[ "$(basename "$p")" == 0003-* && ! -f debian/control ]]; then
+            echo "Skipping $(basename "$p") (Debian-only, absent from source archive)"
+            continue
+        fi
+        echo "Applying $(basename "$p")"
+        patch -p1 -i "$p"
+    done
+}
+
+build() {
+    cmake -B "$srcdir/build" -S "$srcdir/$_pkgname-$_commit" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -Wno-dev
+    cmake --build "$srcdir/build" -j "$(nproc)"
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

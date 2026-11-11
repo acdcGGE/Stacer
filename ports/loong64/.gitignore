@@ -1,0 +1,17 @@
+# Build caches / generated output (not part of the recipe)
+.deps/
+.cache/
+dist/
+.packaging/
+
+# makepkg scratch output
+pkg/
+src/
+*.pkg.tar.zst
+*.tar.gz
+*.deb
+*.sha256
+
+# Editor / OS noise
+*.swp
+.DS_Store

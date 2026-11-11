@@ -1,0 +1,12 @@
+diff --git a/debian/control b/debian/control
+index fc8a14e..1e04a6f 100644
+--- a/debian/control
++++ b/debian/control
+@@ -12,7 +12,6 @@ Build-Depends:
+  qt6-wayland-dev,
+  qt6-charts-dev | libqt6charts6-dev,
+  qt6-svg-dev | libqt6svg6-dev,
+- libqt6opengl6-dev,
+  libgl-dev,
+  libxkbcommon-dev,
+  libvulkan-dev,

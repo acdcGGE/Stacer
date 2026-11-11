@@ -1,0 +1,8 @@
+{
+  "elf": "ELF 64-bit LSB pie executable, LoongArch, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-loongarch-lp64d.so.1, BuildID[sha1]=a92ebed7a4e78c2cda7cbca58d8c53e2d2260491, for GNU/Linux 4.19.0, not stripped",
+  "elfArchLoongArch": "pass",
+  "dynamicDepsResolved": "pass",
+  "cpuInfoProbe": "pass",
+  "guiStartup": "pass",
+  "guiExitCode": 124
+}

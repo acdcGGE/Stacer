@@ -1,0 +1,16 @@
+Test: minimal Qt6Svg program, no Stacer code involved.
+Source: /tmp/svg_anim_minimal.cpp (QSvgRenderer + scanning.svg + setFramesPerSecond(60))
+Qt: 6.8.0 / Deepin 25 / loongarch64
+
+$ QT_QPA_PLATFORM=minimal /tmp/svg_anim_minimal stacer/static/themes/light/img/scanning.svg
+isValid= true animated= true fps= 30 defaultSize= QSize(512, 512)
+realloc(): invalid pointer
+
+Exit: 134 (SIGABRT)
+
+--- With setAnimationEnabled(false) ---
+before: animated= true fps= 30
+after:  animated= false valid= true
+survived 3s, repaintNeeded frames= 0
+
+Exit: 0 (survived 3s, 0 animation frames)

@@ -1,0 +1,86 @@
+diff --git a/stacer/Pages/Helpers/svg_loader_compat.h b/stacer/Pages/Helpers/svg_loader_compat.h
+new file mode 100644
+index 0000000..0a4e83c
+--- /dev/null
++++ b/stacer/Pages/Helpers/svg_loader_compat.h
+@@ -0,0 +1,31 @@
++#ifndef SVG_LOADER_COMPAT_H
++#define SVG_LOADER_COMPAT_H
++
++#include <QSvgRenderer>
++#include <QtGlobal>
++
++// Qt 6.8.0's animated QSvgRenderer corrupts the heap on loong64:
++//   QSvgTransformStyle::apply -> QArrayData::reallocateUnaligned -> abort
++//   ("realloc(): invalid pointer")
++// Stacer's loader artwork uses animated SVG (animateTransform). Qt 6.8.x is
++// the only version where the crash was reproduced; upstream CI on Qt 6.11
++// does not hit it. Keep animation enabled on newer Qt so other distros do
++// not silently lose the feature.
++//
++// Overrides (via -DCMAKE_CXX_FLAGS):
++//   -DSTACER_ENABLE_SVG_ANIMATION   force 60 fps animation on any Qt >= 6.8
++//   -DSTACER_DISABLE_SVG_ANIMATION force a static frame on any Qt >= 6.8
++inline void configureLoaderSvg(QSvgRenderer *renderer)
++{
++#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
++    // QSvgRenderer animation was introduced in Qt 6.8; nothing to configure.
++    Q_UNUSED(renderer);
++#elif defined(STACER_DISABLE_SVG_ANIMATION) || \
++    (QT_VERSION < QT_VERSION_CHECK(6, 9, 0) && !defined(STACER_ENABLE_SVG_ANIMATION))
++    renderer->setAnimationEnabled(false);
++#else
++    renderer->setFramesPerSecond(60);
++#endif
++}
++
++#endif // SVG_LOADER_COMPAT_H
+diff --git a/stacer/Pages/Search/search_page.cpp b/stacer/Pages/Search/search_page.cpp
+index 64a4a1d..7a697e8 100644
+--- a/stacer/Pages/Search/search_page.cpp
++++ b/stacer/Pages/Search/search_page.cpp
+@@ -1,5 +1,6 @@
+ #include "search_page.h"
+ #include "ui_search_page.h"
++#include "../Helpers/svg_loader_compat.h"
+ 
+ #include <QClipboard>
+ #include <QPainter>
+@@ -72,7 +73,7 @@ void SearchPage::init()
+ 
+     delete mLoadingRenderer;
+     mLoadingRenderer = new QSvgRenderer(QString(":/static/themes/%1/img/loading.svg").arg(themeName), this);
+-    mLoadingRenderer->setFramesPerSecond(60);
++    configureLoaderSvg(mLoadingRenderer);
+     mLoadingRenderer->setAspectRatioMode(Qt::KeepAspectRatio);
+     connect(mLoadingRenderer, &QSvgRenderer::repaintNeeded, this, &SearchPage::renderLoading);
+     renderLoading();
+diff --git a/stacer/Pages/SystemCleaner/system_cleaner_page.cpp b/stacer/Pages/SystemCleaner/system_cleaner_page.cpp
+index 2a79bc5..f67ff1a 100644
+--- a/stacer/Pages/SystemCleaner/system_cleaner_page.cpp
++++ b/stacer/Pages/SystemCleaner/system_cleaner_page.cpp
+@@ -1,6 +1,7 @@
+ #include "system_cleaner_page.h"
+ #include "byte_tree_widget.h"
+ #include "ui_system_cleaner_page.h"
++#include "../Helpers/svg_loader_compat.h"
+ 
+ #include <QDebug>
+ #include <QPainter>
+@@ -41,14 +42,14 @@ void SystemCleanerPage::init()
+ 
+         delete mScannerRenderer;
+         mScannerRenderer = new QSvgRenderer(QString(":/static/themes/%1/img/scanning.svg").arg(themeName), this);
+-        mScannerRenderer->setFramesPerSecond(60);
++        configureLoaderSvg(mScannerRenderer);
+         connect(mScannerRenderer, &QSvgRenderer::repaintNeeded, this, &SystemCleanerPage::renderScanner);
+         renderScanner();
+         ui->lblLoadingScanner->hide();
+ 
+         delete mCleanerRenderer;
+         mCleanerRenderer = new QSvgRenderer(QString(":/static/themes/%1/img/loading.svg").arg(themeName), this);
+-        mCleanerRenderer->setFramesPerSecond(60);
++        configureLoaderSvg(mCleanerRenderer);
+         mCleanerRenderer->setAspectRatioMode(Qt::KeepAspectRatio);
+         connect(mCleanerRenderer, &QSvgRenderer::repaintNeeded, this, &SystemCleanerPage::renderCleaner);
+         renderCleaner();

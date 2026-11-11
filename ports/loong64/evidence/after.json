@@ -1,0 +1,25 @@
+{
+    "avgClockMHz": 2300,
+    "clockCount": 4,
+    "clocksMHz": [
+        2300,
+        2300,
+        2300,
+        2300
+    ],
+    "cpuPercents": [
+        18,
+        18,
+        18,
+        18,
+        19
+    ],
+    "logicalCoreCount": 4,
+    "physicalCoreCount": 4,
+    "sysCpuCore": "4",
+    "sysCpuModel": "Loongson-3A5000",
+    "sysCpuSpeed": "2.3 GHz",
+    "sysDistribution": "Deepin 25",
+    "sysKernel": "6.18.48-loong64-desktop-rolling",
+    "sysPlatform": "linux loongarch64"
+}
