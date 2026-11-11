@@ -125,6 +125,11 @@ Set STACER_FORCE_BUNDLED_LIBS=1 to force the bundled library.
 EOF
 
 tar -C "$PORT_ROOT/.packaging" -czf "$TARBALL" "$NAME"
-sha256sum "$TARBALL" > "$TARBALL.sha256"
+# Emit a bare filename so `sha256sum -c` works after downloading the asset;
+# using $TARBALL directly would bake this machine's absolute path into it.
+(
+    cd "$(dirname "$TARBALL")"
+    sha256sum "$(basename "$TARBALL")" > "$(basename "$TARBALL").sha256"
+)
 echo "[portable] $TARBALL"
 echo "[portable] $(du -h "$TARBALL" | cut -f1), sha256 in $TARBALL.sha256"
