@@ -12,13 +12,16 @@
 #
 # What it checks (all derived from the actual built ELF, not guesses):
 #   - CPU architecture is loongarch64 / dpkg loong64
-#   - libQt6Core.so.6 exports the Qt_6.8 ELF symbol version
-#     (the binary's .gnu.version_r requires exactly Qt_6.8 from Core)
-#   - glibc >= 2.36 (highest GLIBC_* symbol requested by the binary)
+#   - libQt6Core.so.6 exports the Qt_6.x ELF symbol version the binary
+#     requires (read from its .gnu.version_r; 6.8 for a Deepin build,
+#     6.11 for a Debian sid build, ...)
+#   - glibc >= the highest GLIBC_* symbol requested by the binary
 #   - every DT_NEEDED library resolves (ldd)
 #   - Qt6 platform plugins are present
 #   - Qt6 modules are not mixed across minor versions
 set -uo pipefail
+# readelf section labels are localized; parsing below expects English.
+export LC_ALL=C
 
 PROG="$(basename "$0")"
 BIN=""
@@ -131,35 +134,53 @@ else
 fi
 
 # ---- 2. Qt Core symbol version ------------------------------------------
+# The requirement comes from the binary itself, not a hardcoded minor.
+QT_NEED_NODE=""
+if [[ -n "$BIN" ]] && command -v readelf >/dev/null 2>&1; then
+    QT_NEED_NODE="$(readelf -V "$BIN" 2>/dev/null | awk '
+        /File: libQt6Core\.so\.6/ {incore=1; next}
+        /File: / {incore=0}
+        incore' | grep -o 'Qt_6\.[0-9][0-9]*' | sed 's/Qt_6\.//' | sort -n | tail -1)"
+fi
 CORE_LIB="$(find_lib libQt6Core.so.6)"
 QT_MAJOR_NODE=""
 if [[ -z "$CORE_LIB" ]]; then
     record "qt_core" "false" "libQt6Core.so.6 not found; install Qt6 Base"
 elif ! command -v readelf >/dev/null 2>&1; then
-    warn "qt_core" "readelf unavailable, cannot verify Qt_6.8 symbol version (install binutils)"
+    warn "qt_core" "readelf unavailable, cannot verify Qt symbol version (install binutils)"
 else
     QT_MAJOR_NODE="$(qt_max_node "$CORE_LIB")"
     # Keep the dump in a variable: `cmd | grep -q` makes grep exit early and
     # triggers SIGPIPE under `set -o pipefail`, which would look like a failure.
     core_verdump="$(readelf -V "$CORE_LIB" 2>/dev/null || true)"
-    if [[ "$core_verdump" == *Qt_6.8* ]]; then
-        record "qt_core" "true" "$CORE_LIB provides Qt_6.8 (highest node Qt_6.${QT_MAJOR_NODE:-?}); Qt >= 6.8"
+    if [[ -z "$QT_NEED_NODE" ]]; then
+        warn "qt_core" "no binary given to derive the required Qt node; environment highest is Qt_6.${QT_MAJOR_NODE:-?}"
+    elif [[ "$core_verdump" == *"Qt_6.$QT_NEED_NODE"* ]]; then
+        record "qt_core" "true" "$CORE_LIB provides Qt_6.$QT_NEED_NODE (highest node Qt_6.${QT_MAJOR_NODE:-?}); binary needs Qt >= 6.$QT_NEED_NODE"
     else
-        record "qt_core" "false" "$CORE_LIB does NOT provide Qt_6.8 (highest node Qt_6.${QT_MAJOR_NODE:-?}); Qt 6.0-6.7 will fail with 'version Qt_6.8 not found'"
+        record "qt_core" "false" "$CORE_LIB does NOT provide Qt_6.$QT_NEED_NODE (highest node Qt_6.${QT_MAJOR_NODE:-?}); runtime would fail with 'version Qt_6.$QT_NEED_NODE not found'"
     fi
 fi
 
 # ---- 3. glibc ------------------------------------------------------------
+GLIBC_NEED="2.36"
+if [[ -n "$BIN" ]] && command -v readelf >/dev/null 2>&1; then
+    glibc_derived="$(readelf -V "$BIN" 2>/dev/null | awk '
+        /File: libc\.so\.6/ {f=1; next}
+        /File: / {f=0}
+        f' | grep -o 'GLIBC_[0-9][0-9.]*' | sort -V | tail -1)"
+    [[ -n "$glibc_derived" ]] && GLIBC_NEED="${glibc_derived#GLIBC_}"
+fi
 libc_ver=""
 if command -v ldd >/dev/null 2>&1; then
     libc_ver="$(ldd --version 2>/dev/null | head -1 | grep -o -E '[0-9]+\.[0-9]+$' | head -1)"
 fi
 if [[ -z "$libc_ver" ]]; then
-    warn "glibc" "cannot determine glibc version; binary needs >= 2.36"
-elif version_ge "$libc_ver" "2.36"; then
-    record "glibc" "true" "$libc_ver >= 2.36 (highest GLIBC_* symbol used)"
+    warn "glibc" "cannot determine glibc version; binary needs >= $GLIBC_NEED"
+elif version_ge "$libc_ver" "$GLIBC_NEED"; then
+    record "glibc" "true" "$libc_ver >= $GLIBC_NEED (highest GLIBC_* symbol used)"
 else
-    record "glibc" "false" "$libc_ver < 2.36; binary would fail with 'GLIBC_2.36 not found'"
+    record "glibc" "false" "$libc_ver < $GLIBC_NEED; binary would fail with 'GLIBC_$GLIBC_NEED not found'"
 fi
 
 # ---- 4. DT_NEEDED resolution --------------------------------------------
@@ -228,7 +249,7 @@ fi
 # ---- verdict -------------------------------------------------------------
 if (( FAILED == 0 )); then
     compatible="true"
-    verdict="Compatible: Qt >= 6.8, glibc >= 2.36, all shared libraries resolve."
+    verdict="Compatible: Qt >= 6.${QT_NEED_NODE:-?}, glibc >= $GLIBC_NEED, all shared libraries resolve."
 else
     compatible="false"
     verdict="Incompatible: $FAILED check(s) failed. Do not install this binary here; rebuild from source on this system."
@@ -240,8 +261,10 @@ if (( AS_JSON )); then
     printf '  "machine": "%s",\n' "$(json_escape "$machine")"
     printf '  "dpkgArchitecture": "%s",\n' "$(json_escape "$dpkg_arch")"
     printf '  "qtCoreLibrary": "%s",\n' "$(json_escape "${CORE_LIB:-}")"
+    printf '  "qtRequiredNode": "Qt_6.%s",\n' "$(json_escape "${QT_NEED_NODE:-}")"
     printf '  "qtHighestNode": "Qt_6.%s",\n' "$(json_escape "${QT_MAJOR_NODE:-}")"
     printf '  "glibc": "%s",\n' "$(json_escape "$libc_ver")"
+    printf '  "glibcRequired": "%s",\n' "$(json_escape "$GLIBC_NEED")"
     printf '  "warnings": [%s],\n' "$(json_string_array "${WARNINGS[@]:-}")"
     printf '  "checks": [%s],\n' "$(IFS=,; printf '%s' "${CHECKS_JSON[*]:-}")"
     printf '  "compatible": %s,\n' "$compatible"

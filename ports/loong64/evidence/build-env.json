@@ -1,16 +1,18 @@
 {
-  "kernel": "6.18.48-loong64-desktop-rolling",
+  "kernel": "6.18.57-loong64-gxde-desktop",
   "machine": "loongarch64",
-  "os": "Deepin 25",
+  "os": "Debian GNU/Linux forky/sid",
   "dpkgArchitecture": "loong64",
   "triplet": "loongarch64-linux-gnu",
-  "gcc": "gcc (Deepin 12.3.0-17deepin19) 12.3.0",
-  "cmake": "cmake version 3.31.4",
-  "qmake": "Using Qt version 6.8.0 (/usr/lib/loongarch64-linux-gnu)",
-  "qtCore": "6.8.0+dfsg-0deepin42",
-  "qtSvg": "6.8.0-0deepin6",
-  "qtChartsStaged": "6.8.0-0deepin (apt download, local staging)",
+  "gcc": "gcc (Debian 16.2.0-4) 16.2.0",
+  "cmake": "cmake version 4.3.4",
+  "qmake": "Using Qt version 6.11.2 (/usr/lib/loongarch64-linux-gnu)",
+  "qtCore": "6.11.2+dfsg-7 (libqt6core6t64)",
+  "qtSvg": "6.11.2-2",
+  "qtCharts": "6.11.2-2 (qt6-charts-dev, system-wide; no staging needed)",
   "cpuModel": "Loongson-3A5000",
   "cpuMhzField": "2300.00",
-  "qmakeBinary": "qmake6 (qt6-base-dev-tools 6.8.0+dfsg-0deepin42)"
+  "gpu": "AMD Oland PRO [Radeon R7 240/340] [1002:6613], GCN 1.0 (SI), amdgpu",
+  "qmakeBinary": "qmake6 (qt6-base-dev-tools 6.11.2)",
+  "note": "Re-validation environment. Initial validation was Deepin 25 / Qt 6.8.0 / GCC 12.3.0 (see README table and git history)."
 }

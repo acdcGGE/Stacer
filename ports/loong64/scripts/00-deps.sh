@@ -47,8 +47,15 @@ for tool in lconvert lrelease lupdate; do
     ln -sf "$src" "$STAGE_USR/lib/qt6/bin/$tool"
 done
 for tool in lprodump lrelease-pro lupdate-pro; do
-    src="/usr/lib/qt6/libexec/$tool"
-    [[ -x "$src" ]] || { echo "ERROR: $src missing (install qt6-tools-dev-tools)" >&2; exit 1; }
+    src=""
+    # Layout differs by Qt version/distro: 6.8 keeps them in libexec,
+    # Debian's 6.11 puts lrelease-pro/lupdate-pro in /usr/lib/qt6/bin.
+    for cand in "/usr/lib/qt6/libexec/$tool" "/usr/lib/qt6/bin/$tool" "/usr/bin/$tool"; do
+        if [[ -x "$cand" ]]; then src="$cand"; break; fi
+    done
+    if [[ -z "$src" ]]; then
+        echo "ERROR: $tool missing (install qt6-tools-dev-tools)" >&2; exit 1
+    fi
     ln -sf "$src" "$STAGE_USR/lib/qt6/libexec/$tool"
 done
 

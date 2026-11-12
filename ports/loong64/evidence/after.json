@@ -8,18 +8,18 @@
         2300
     ],
     "cpuPercents": [
-        18,
-        18,
-        18,
-        18,
-        19
+        45,
+        45,
+        45,
+        45,
+        45
     ],
     "logicalCoreCount": 4,
     "physicalCoreCount": 4,
     "sysCpuCore": "4",
     "sysCpuModel": "Loongson-3A5000",
     "sysCpuSpeed": "2.3 GHz",
-    "sysDistribution": "Deepin 25",
-    "sysKernel": "6.18.48-loong64-desktop-rolling",
+    "sysDistribution": "Debian GNU/Linux forky/sid",
+    "sysKernel": "6.18.57-loong64-gxde-desktop",
     "sysPlatform": "linux loongarch64"
 }

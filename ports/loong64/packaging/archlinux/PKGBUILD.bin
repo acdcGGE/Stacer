@@ -1,0 +1,61 @@
+# PKGBUILD.bin — packages the PREBUILT dist/ tree as a pacman package.
+#
+# This is the binary-packaging counterpart to PKGBUILD (which builds from
+# the GitHub source). It mirrors packaging/make-deb.sh: it takes the already
+# compiled, verified artifact in ../../dist and lays it out under /usr.
+#
+# Usage:
+#   cd packaging/archlinux
+#   makepkg -p PKGBUILD.bin --nodeps
+#       -> stacer-1.8.0-1-loong64.pkg.tar.zst
+#
+# The produced package carries the same feature set as dist/ (LoongArch
+# CPU-info fix, QtSvg animation workaround, and the temperature/GPU monitor).
+# Set STACER_DIST to point at a different build output if needed.
+
+pkgname=stacer
+pkgver=1.8.0
+pkgrel=1
+pkgdesc="Linux system optimizer and monitor (LoongArch port: CPU-info fix, QtSvg workaround, temperature/GPU monitoring)"
+arch=('loong64')
+url="https://github.com/acdcGGE/Stacer"
+license=('GPL-3.0-or-later')
+depends=(
+  'qt6-base'
+  'qt6-charts'
+  'qt6-svg'
+  'hicolor-icon-theme'
+)
+optdepends=(
+  'qt6-wayland: Wayland session support'
+  'polkit: privileged cleanup actions'
+  'systemd: manage system services'
+)
+provides=('stacer')
+conflicts=('stacer-git')
+options=('!strip' '!emptydirs' '!debug')
+source=()
+md5sums=()
+
+package() {
+    local dist="${STACER_DIST:-$startdir/../../dist}"
+    if [[ ! -x "$dist/bin/stacer" ]]; then
+        echo "ERROR: dist/bin/stacer missing — run build.sh first" >&2
+        return 1
+    fi
+
+    install -d "$pkgdir/usr/bin" "$pkgdir/usr/share"
+    cp -a "$dist/bin/stacer"        "$pkgdir/usr/bin/stacer"
+    cp -a "$dist/share/."           "$pkgdir/usr/share/"
+
+    # The prebuilt dist/ tree ships some share subdirs as 0775; normalize to
+    # 0755 so pacman does not warn about "目录权限不一致" on install.
+    chmod 755 "$pkgdir/usr/share" \
+              "$pkgdir/usr/share/applications" \
+              "$pkgdir/usr/share/icons" \
+              "$pkgdir/usr/share/metainfo" \
+              "$pkgdir/usr/share/stacer"
+
+    # Make sure the binary is executable (cp -a preserves it, but be explicit).
+    chmod 755 "$pkgdir/usr/bin/stacer"
+}

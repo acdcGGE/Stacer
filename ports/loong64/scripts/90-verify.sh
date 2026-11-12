@@ -52,8 +52,10 @@ gui_log="$(mktemp)"
 set +e
 env LD_LIBRARY_PATH="$LIBDIR" \
     QT_QPA_PLATFORM=offscreen \
+    TMPDIR="$(mktemp -d)" \
     XDG_CONFIG_HOME="$(mktemp -d)" \
     XDG_CACHE_HOME="$(mktemp -d)" \
+    XDG_RUNTIME_DIR="$(mktemp -d)" \
     timeout 5 "$BIN" --nosplash > "$gui_log" 2>&1
 gui_rc=$?
 set -e

@@ -21,6 +21,28 @@ if [[ "${2:-}" == "--bundle-charts" ]]; then BUNDLE=1; fi
 
 [[ -x "$DIST/bin/stacer" ]] || { echo "ERROR: run ./build.sh first" >&2; exit 1; }
 
+# Derive runtime requirements from the actual ELF so the docs match whichever
+# Qt/glibc the build host had (Deepin 6.8, sid 6.11, Arch 6.12, ...).
+bin_verdump="$(LC_ALL=C readelf -V "$DIST/bin/stacer")"
+QT_NEED_NODE="$(printf '%s\n' "$bin_verdump" | awk '
+    /File: libQt6Core\.so\.6/ {f=1; next} /File: / {f=0} f' \
+    | grep -o 'Qt_6\.[0-9][0-9]*' | sed 's/Qt_6\.//' | sort -n | tail -1)"
+[[ -n "$QT_NEED_NODE" ]] || { echo "ERROR: cannot derive Qt symbol version from binary" >&2; exit 1; }
+QT_NEED="6.$QT_NEED_NODE"
+GLIBC_NEED="$(printf '%s\n' "$bin_verdump" | awk '
+    /File: libc\.so\.6/ {f=1; next} /File: / {f=0} f' \
+    | grep -o 'GLIBC_[0-9][0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)"
+if (( QT_NEED_NODE >= 9 )); then
+    ANIM_NOTE="Animation note: this binary was COMPILED against Qt $QT_NEED (>= 6.9),
+so the loader SVGs keep the upstream 60 fps animation."
+else
+    ANIM_NOTE="Animation note: this binary was COMPILED against Qt $QT_NEED, so the loader
+SVGs are rendered as static frames (workaround for a QtSvg heap-corruption
+crash on loong64). That choice is made at build time: installing this binary
+on a Qt >= 6.9 system does NOT restore the 60 fps animation. Rebuild from
+source on that system (./build.sh or the PKGBUILD) to get animation back."
+fi
+
 NAME="stacer-${UPSTREAM_VERSION}-${TARGET_ARCH}-linux-portable"
 if (( BUNDLE )); then NAME="${NAME}-bundled"; fi
 WORK="$PORT_ROOT/.packaging/$NAME"
@@ -43,9 +65,10 @@ cat > "$WORK/stacer-run.sh" <<'LAUNCHER'
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Prefer the SYSTEM Qt6Charts. Mixing a bundled Qt 6.8 module into a system
-# with Qt 6.9+ risks private-ABI mismatch (Qt Charts uses QtGui private API).
-# The bundled copy is only a fallback for machines without qt6-charts.
+# Prefer the SYSTEM Qt6Charts. Mixing a bundled Charts from one Qt minor
+# into a system with another risks private-ABI mismatch (Qt Charts uses
+# QtGui private API). The bundled copy is only a fallback for machines
+# without qt6-charts.
 libdir=""
 system_charts=""
 for d in \
@@ -62,8 +85,8 @@ elif [[ -n "$system_charts" ]]; then
     libdir="$system_charts"
 elif [[ -f "$HERE/lib/libQt6Charts.so.6" ]]; then
     libdir="$HERE/lib"
-    echo "note: using bundled libQt6Charts (built for Qt 6.8)." >&2
-    echo "      On a newer system Qt, install the distro qt6-charts package instead." >&2
+    echo "note: using bundled libQt6Charts; it must match your system Qt minor." >&2
+    echo "      If versions differ, install the distro qt6-charts package instead." >&2
 fi
 
 if [[ -n "$libdir" ]]; then
@@ -95,32 +118,28 @@ Run:
   ./stacer-run.sh --nosplash
 
 Minimum runtime requirements (any Linux of the SAME CPU architecture):
-  - Qt 6.8 OR NEWER. This binary requests the ELF symbol version Qt_6.8
-    from libQt6Core.so.6; Qt 6.0-6.7 will fail with
-    "version Qt_6.8 not found". All Qt modules must be the same version.
+  - Qt $QT_NEED OR NEWER. This binary requests the ELF symbol version Qt_$QT_NEED
+    from libQt6Core.so.6; older Qt will fail with
+    "version Qt_$QT_NEED not found". All Qt modules must be the same version.
   - Qt6 Base (Core/Gui/Widgets/Network/Concurrent/OpenGL), Qt6 Charts, Qt6 Svg
   - Qt6 platform plugin for your session (xcb / wayland)
-  - glibc >= 2.36, libGL, libxkbcommon
+  - glibc >= $GLIBC_NEED, libGL, libxkbcommon
   Debian/Deepin : apt install libqt6charts6 qt6-qpa-plugins qt6-wayland
   Arch          : pacman -S qt6-base qt6-charts qt6-svg qt6-wayland
   Fedora        : dnf install qt6-qtcharts qt6-qtbase-gui
 
 Check first: ./check-target-compat.sh (included, no root needed; --json
-emits machine-readable results). It verifies Qt >= 6.8, glibc >= 2.36,
+emits machine-readable results). It verifies Qt >= $QT_NEED, glibc >= $GLIBC_NEED,
 shared libraries and QPA plugins before you even unpack/install.
 
 This tarball is cross-DISTRO, NOT cross-ARCH: the binary is $(uname -m).
 For x86_64 / aarch64, build from source with packaging/archlinux/PKGBUILD
 (or ./build.sh on that machine).
 
-Animation note: this binary was COMPILED against Qt 6.8, so the loader SVGs
-are rendered as static frames (workaround for a QtSvg heap-corruption crash
-on loong64). That choice is made at build time: installing this binary on a
-Qt >= 6.9 system does NOT restore the 60 fps animation. Rebuild from source
-on that system (./build.sh or the PKGBUILD) to get animation back.
+$ANIM_NOTE
 
 Bundled variant (-bundled): stacer-run.sh prefers the system libQt6Charts
-and falls back to the bundled Qt 6.8 copy only when none is installed.
+and falls back to the bundled Qt $QT_NEED copy only when none is installed.
 Set STACER_FORCE_BUNDLED_LIBS=1 to force the bundled library.
 EOF
 
