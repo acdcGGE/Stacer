@@ -861,7 +861,7 @@ index d8d70f2..2a46608 100644
  
      LineBar *mDownloadBar;
 diff --git a/stacer/Pages/Resources/resources_page.cpp b/stacer/Pages/Resources/resources_page.cpp
-index 1f3ab77..93d871c 100644
+index 1f3ab77..e95a4db 100644
 --- a/stacer/Pages/Resources/resources_page.cpp
 +++ b/stacer/Pages/Resources/resources_page.cpp
 @@ -2,6 +2,8 @@
@@ -873,7 +873,27 @@ index 1f3ab77..93d871c 100644
  ResourcesPage::~ResourcesPage()
  {
      delete ui;
-@@ -46,6 +48,45 @@ void ResourcesPage::init()
+@@ -16,6 +18,7 @@ ResourcesPage::ResourcesPage(QWidget *parent) :
+     mChartDiskReadWrite(new HistoryChart(tr("History of Disk Read Write"), 2, new QCategoryAxis, this)),
+     mChartMemory(new HistoryChart(tr("History of Memory"), 2, nullptr, this)),
+     mChartNetwork(new HistoryChart(tr("History of Network"), 2, new QCategoryAxis, this)),
++    mChartGpu(new HistoryChart(tr("History of GPU"), 1, nullptr, this)),
+     mChartDiskPie(new QChart),
+     mTimer(new QTimer(this))
+ {
+@@ -35,9 +38,10 @@ void ResourcesPage::init()
+ 
+     mChartCpu->setYMax(100);
+     mChartMemory->setYMax(100);
++    mChartGpu->setYMax(100);
+ 
+     QList<QWidget *> widgets = {
+-        mChartCpu, mChartCpuLoadAvg, mChartDiskReadWrite, mChartMemory, mChartNetwork
++        mChartCpu, mChartCpuLoadAvg, mChartDiskReadWrite, mChartMemory, mChartNetwork, mChartGpu
+     };
+ 
+     for (QWidget *widget : widgets) {
+@@ -46,11 +50,42 @@ void ResourcesPage::init()
  
      Utilities::addDropShadow(widgets, 40);
  
@@ -899,17 +919,8 @@ index 1f3ab77..93d871c 100644
 +        sensorGrid->addWidget(valueLabel, sRow, 1);
 +        sRow++;
 +    };
-+    addSensorRow(tr("CPU Temperature"), mLblCpuTemp);
 +    addSensorRow(tr("GPU Temperature"), mLblGpuTemp);
-+    addSensorRow(tr("GPU Usage"), mLblGpuUsage);
 +    addSensorRow(tr("GPU Frequency"), mLblGpuClock);
-+
-+    QLabel *diskTitle = new QLabel(tr("Disk Temperature"));
-+    diskTitle->setObjectName("lblSensorName");
-+    mDiskTempLayout = new QVBoxLayout();
-+    mDiskTempLayout->setSpacing(2);
-+    sensorGrid->addWidget(diskTitle, sRow, 0);
-+    sensorGrid->addLayout(mDiskTempLayout, sRow, 1);
 +
 +    Utilities::addDropShadow(mSensorsPanel, 40);
 +    ui->chartsLayout->addWidget(mSensorsPanel);
@@ -919,47 +930,51 @@ index 1f3ab77..93d871c 100644
      connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateCpuChart);
      connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateCpuLoadAvg);
      connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateDiskReadWrite);
-@@ -399,3 +440,38 @@ void ResourcesPage::updateCpuChart()
+     connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateMemoryChart);
+     connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateNetworkChart);
++    connect(mTimer, &QTimer::timeout, this, &ResourcesPage::updateGpuChart);
+ 
+     mTimer->start(1000);
+ 
+@@ -399,3 +434,36 @@ void ResourcesPage::updateCpuChart()
  
      second++;
  }
 +
++void ResourcesPage::updateGpuChart()
++{
++    static int second = 0;
++
++    const double usage = im->getGpuUsage();
++    const int p = usage >= 0 ? qRound(usage) : 0;
++
++    QVector<QSplineSeries *> seriesList = mChartGpu->getSeriesList();
++    QSplineSeries *s = seriesList.at(0);
++
++    for (int i = 0; i < (second < 61 ? second : 61); i++)
++        s->replace(i, (i + 1), s->at(i).y());
++
++    s->insert(0, QPointF(0, p));
++    s->setName(usage >= 0 ? QString("GPU: %1%").arg(p) : QString("GPU: N/A"));
++
++    if (second > 61)
++        s->removePoints(61, 1);
++
++    mChartGpu->setSeriesList(seriesList);
++
++    second++;
++}
++
 +void ResourcesPage::updateSensors()
 +{
-+    const double cpu = im->getCpuTemp();
-+    mLblCpuTemp->setText(cpu >= 0 ? QString::asprintf("%.1f °C", cpu) : tr("N/A"));
-+
 +    const double gpu = im->getGpuTemp();
 +    mLblGpuTemp->setText(gpu >= 0 ? QString::asprintf("%.1f °C", gpu) : tr("N/A"));
 +
-+    const double usage = im->getGpuUsage();
-+    mLblGpuUsage->setText(usage >= 0 ? QString::asprintf("%.0f %%", usage) : tr("N/A"));
-+
 +    const double clk = im->getGpuClock();
 +    mLblGpuClock->setText(clk >= 0 ? QString::asprintf("%.0f MHz", clk) : tr("N/A"));
-+
-+    // Rebuild the per-disk temperature list.
-+    QLayoutItem *child;
-+    while ((child = mDiskTempLayout->takeAt(0)) != nullptr) {
-+        delete child->widget();
-+        delete child;
-+    }
-+
-+    const QList<TempReading> disks = im->getDiskTemperatures();
-+    if (disks.isEmpty()) {
-+        QLabel *na = new QLabel(tr("N/A (root or smartctl required)"));
-+        na->setObjectName("lblSensorValue");
-+        mDiskTempLayout->addWidget(na);
-+    } else {
-+        for (const TempReading &d : disks) {
-+            QLabel *l = new QLabel(QString("%1: %2 °C").arg(d.label).arg(d.temp, 0, 'f', 1));
-+            l->setObjectName("lblSensorValue");
-+            mDiskTempLayout->addWidget(l);
-+        }
-+    }
 +}
 diff --git a/stacer/Pages/Resources/resources_page.h b/stacer/Pages/Resources/resources_page.h
-index 118669a..c297303 100644
+index 118669a..4b2c9f2 100644
 --- a/stacer/Pages/Resources/resources_page.h
 +++ b/stacer/Pages/Resources/resources_page.h
 @@ -2,10 +2,14 @@
@@ -977,24 +992,32 @@ index 118669a..c297303 100644
  #include "Managers/info_manager.h"
  #include "history_chart.h"
  
-@@ -29,6 +33,7 @@ class ResourcesPage : public QWidget
+@@ -27,8 +31,10 @@ class ResourcesPage : public QWidget
+     void updateDiskReadWrite();
+     void updateMemoryChart();
      void updateNetworkChart();
++    void updateGpuChart();
      void initDiskPieChart();
      void diskPieSeriesCustomize();
 +    void updateSensors();
  
    private:
      void init();
-@@ -53,6 +58,13 @@ class ResourcesPage : public QWidget
+@@ -43,6 +49,7 @@ class ResourcesPage : public QWidget
+     HistoryChart *mChartDiskReadWrite;
+     HistoryChart *mChartMemory;
+     HistoryChart *mChartNetwork;
++    HistoryChart *mChartGpu;
+ 
+     QChartView *mChartViewDiskPie;
+     QChart *mChartDiskPie;
+@@ -53,6 +60,10 @@ class ResourcesPage : public QWidget
  
      QList<int> chartColors;
  
 +    QWidget *mSensorsPanel;
-+    QLabel *mLblCpuTemp;
 +    QLabel *mLblGpuTemp;
-+    QLabel *mLblGpuUsage;
 +    QLabel *mLblGpuClock;
-+    QVBoxLayout *mDiskTempLayout;
 +
      QTimer *mTimer;
  };
@@ -1044,7 +1067,7 @@ index 86055c5..c49f48f 100644
      width: 16;
      height: 16;
 diff --git a/translations/stacer_ar.ts b/translations/stacer_ar.ts
-index 2f5e145..6dc6cf7 100644
+index 2f5e145..194c2f0 100644
 --- a/translations/stacer_ar.ts
 +++ b/translations/stacer_ar.ts
 @@ -207,7 +207,7 @@
@@ -1204,7 +1227,7 @@ index 2f5e145..6dc6cf7 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>لوحة التحكم</translation>
      </message>
@@ -1226,6 +1249,11 @@ index 2f5e145..6dc6cf7 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -1255,28 +1283,13 @@ index 2f5e145..6dc6cf7 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -1346,15 +1359,10 @@ index 2f5e145..6dc6cf7 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>بحث...</translation>
      </message>
      <message>
@@ -1634,7 +1642,7 @@ index 2f5e145..6dc6cf7 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -1663,7 +1671,7 @@ index 2f5e145..6dc6cf7 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 حجم الملفات التي تم تنظيفها.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>إلغاء تثبيت المحدّد</translation>
      </message>
      <message>
@@ -1687,7 +1695,7 @@ index 2f5e145..6dc6cf7 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_ca.ts b/translations/stacer_ca.ts
-index 1c86f49..dc7b87e 100644
+index 1c86f49..82ee8ef 100644
 --- a/translations/stacer_ca.ts
 +++ b/translations/stacer_ca.ts
 @@ -207,7 +207,7 @@
@@ -1847,7 +1855,7 @@ index 1c86f49..dc7b87e 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Panell de control</translation>
      </message>
@@ -1869,6 +1877,11 @@ index 1c86f49..dc7b87e 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Històric de la GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Històric de mitjanes de càrrega de la CPU</translation>
@@ -1898,28 +1911,13 @@ index 1c86f49..dc7b87e 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -1989,15 +1987,10 @@ index 1c86f49..dc7b87e 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Cerca...</translation>
      </message>
      <message>
@@ -2277,7 +2270,7 @@ index 1c86f49..dc7b87e 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nom</translation>
      </message>
      <message>
@@ -2306,7 +2299,7 @@ index 1c86f49..dc7b87e 100644
          <source>%1 size files cleaned.</source>
          <translation>S&apos;ha netejat fitxers de mida %1</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstal·la els seleccionats</translation>
      </message>
      <message>
@@ -2330,7 +2323,7 @@ index 1c86f49..dc7b87e 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_cs.ts b/translations/stacer_cs.ts
-index f640039..e9a62bf 100644
+index f640039..b9ebc2f 100644
 --- a/translations/stacer_cs.ts
 +++ b/translations/stacer_cs.ts
 @@ -207,7 +207,7 @@
@@ -2490,7 +2483,7 @@ index f640039..e9a62bf 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Nástěnka</translation>
      </message>
@@ -2512,6 +2505,11 @@ index f640039..e9a62bf 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Historie GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historie průměrů zatížení procesoru</translation>
@@ -2541,28 +2539,13 @@ index f640039..e9a62bf 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -2632,15 +2615,10 @@ index f640039..e9a62bf 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Hledat...</translation>
      </message>
      <message>
@@ -2920,7 +2898,7 @@ index f640039..e9a62bf 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Jméno</translation>
      </message>
      <message>
@@ -2949,7 +2927,7 @@ index f640039..e9a62bf 100644
          <source>%1 size files cleaned.</source>
          <translation>Vyčištěno %1 souborů.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Odinstalovat vybrané</translation>
      </message>
      <message>
@@ -2973,7 +2951,7 @@ index f640039..e9a62bf 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_de.ts b/translations/stacer_de.ts
-index b4f779b..d1ac74a 100644
+index b4f779b..415b05e 100644
 --- a/translations/stacer_de.ts
 +++ b/translations/stacer_de.ts
 @@ -207,7 +207,7 @@
@@ -3133,7 +3111,7 @@ index b4f779b..d1ac74a 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Übersicht</translation>
      </message>
@@ -3155,6 +3133,11 @@ index b4f779b..d1ac74a 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU Auslastung Verlauf</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>CPU Load-Durschnittswerte Verlauf</translation>
@@ -3184,28 +3167,13 @@ index b4f779b..d1ac74a 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -3275,15 +3243,10 @@ index b4f779b..d1ac74a 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Suchen...</translation>
      </message>
      <message>
@@ -3563,7 +3526,7 @@ index b4f779b..d1ac74a 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation>%1 Dateien gefunden. Zeige %2 von ihnen.</translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Name</translation>
      </message>
      <message>
@@ -3592,7 +3555,7 @@ index b4f779b..d1ac74a 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 Dateien bereinigt.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Ausgewählte deinstallieren</translation>
      </message>
      <message>
@@ -3616,7 +3579,7 @@ index b4f779b..d1ac74a 100644
          <translation>De-Installiere ausgewählte (%1)</translation>
      </message>
 diff --git a/translations/stacer_en.ts b/translations/stacer_en.ts
-index 58e481d..e15aa3e 100644
+index 58e481d..27a6b6f 100644
 --- a/translations/stacer_en.ts
 +++ b/translations/stacer_en.ts
 @@ -207,7 +207,7 @@
@@ -3776,7 +3739,7 @@ index 58e481d..e15aa3e 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation type="unfinished"></translation>
      </message>
@@ -3798,6 +3761,11 @@ index 58e481d..e15aa3e 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -3827,28 +3795,13 @@ index 58e481d..e15aa3e 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -3918,15 +3871,10 @@ index 58e481d..e15aa3e 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4206,7 +4154,7 @@ index 58e481d..e15aa3e 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4235,7 +4183,7 @@ index 58e481d..e15aa3e 100644
          <source>%1 size files cleaned.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -4259,7 +4207,7 @@ index 58e481d..e15aa3e 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_es.ts b/translations/stacer_es.ts
-index 2796ee2..10ba2b5 100644
+index 2796ee2..7ff48c4 100644
 --- a/translations/stacer_es.ts
 +++ b/translations/stacer_es.ts
 @@ -207,7 +207,7 @@
@@ -4419,7 +4367,7 @@ index 2796ee2..10ba2b5 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Tablero</translation>
      </message>
@@ -4441,6 +4389,11 @@ index 2796ee2..10ba2b5 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Historial de la GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historial de los proceso de carga de la CPU</translation>
@@ -4470,28 +4423,13 @@ index 2796ee2..10ba2b5 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -4561,15 +4499,10 @@ index 2796ee2..10ba2b5 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Buscar...</translation>
      </message>
      <message>
@@ -4849,7 +4782,7 @@ index 2796ee2..10ba2b5 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nombre</translation>
      </message>
      <message>
@@ -4878,7 +4811,7 @@ index 2796ee2..10ba2b5 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 del tamaño de los archivos limpiado.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstalar seleccionados</translation>
      </message>
      <message>
@@ -4902,7 +4835,7 @@ index 2796ee2..10ba2b5 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_eu.ts b/translations/stacer_eu.ts
-index 3878820..d10e0c5 100644
+index 3878820..a631882 100644
 --- a/translations/stacer_eu.ts
 +++ b/translations/stacer_eu.ts
 @@ -207,7 +207,7 @@
@@ -5062,7 +4995,7 @@ index 3878820..d10e0c5 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Panela</translation>
      </message>
@@ -5084,6 +5017,11 @@ index 3878820..d10e0c5 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPUaren historia</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>PUZaren prozesu-kargaren historia</translation>
@@ -5113,28 +5051,13 @@ index 3878820..d10e0c5 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -5204,15 +5127,10 @@ index 3878820..d10e0c5 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Bilatu...</translation>
      </message>
      <message>
@@ -5492,7 +5410,7 @@ index 3878820..d10e0c5 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Izena</translation>
      </message>
      <message>
@@ -5521,7 +5439,7 @@ index 3878820..d10e0c5 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 tamainako aplikazioak garbituta.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstalatu hautatutakoak</translation>
      </message>
      <message>
@@ -5545,7 +5463,7 @@ index 3878820..d10e0c5 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_fr.ts b/translations/stacer_fr.ts
-index 9a732a4..d3bf95d 100644
+index 9a732a4..6ce6f49 100644
 --- a/translations/stacer_fr.ts
 +++ b/translations/stacer_fr.ts
 @@ -207,7 +207,7 @@
@@ -5705,7 +5623,7 @@ index 9a732a4..d3bf95d 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Tableau de bord</translation>
      </message>
@@ -5727,6 +5645,11 @@ index 9a732a4..d3bf95d 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Historique du GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historique des moyennes de charge du CPU</translation>
@@ -5756,28 +5679,13 @@ index 9a732a4..d3bf95d 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -5847,15 +5755,10 @@ index 9a732a4..d3bf95d 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Recherche...</translation>
      </message>
      <message>
@@ -6135,7 +6038,7 @@ index 9a732a4..d3bf95d 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation>%1 fichiers trouvés. Affichage de %2 d&apos;entre eux.</translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nom</translation>
      </message>
      <message>
@@ -6164,7 +6067,7 @@ index 9a732a4..d3bf95d 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 de taille de fichiers nettoyés.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Désinstallation sélectionnée</translation>
      </message>
      <message>
@@ -6188,7 +6091,7 @@ index 9a732a4..d3bf95d 100644
          <translation>Désinstaller la sélection (%1)</translation>
      </message>
 diff --git a/translations/stacer_gl.ts b/translations/stacer_gl.ts
-index 5dc8b8e..439be4a 100644
+index 5dc8b8e..c49dca4 100644
 --- a/translations/stacer_gl.ts
 +++ b/translations/stacer_gl.ts
 @@ -207,7 +207,7 @@
@@ -6348,7 +6251,7 @@ index 5dc8b8e..439be4a 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Panel</translation>
      </message>
@@ -6370,6 +6273,11 @@ index 5dc8b8e..439be4a 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Historial da GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historial das medias de carga da CPU</translation>
@@ -6399,28 +6307,13 @@ index 5dc8b8e..439be4a 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -6490,15 +6383,10 @@ index 5dc8b8e..439be4a 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Buscar...</translation>
      </message>
      <message>
@@ -6778,7 +6666,7 @@ index 5dc8b8e..439be4a 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nome</translation>
      </message>
      <message>
@@ -6807,7 +6695,7 @@ index 5dc8b8e..439be4a 100644
          <source>%1 size files cleaned.</source>
          <translation>Ficheiros de tamaño %1 limpos.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstalar seleccionados</translation>
      </message>
      <message>
@@ -6831,7 +6719,7 @@ index 5dc8b8e..439be4a 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_hi.ts b/translations/stacer_hi.ts
-index 9533734..85ed976 100644
+index 9533734..6adb5a1 100644
 --- a/translations/stacer_hi.ts
 +++ b/translations/stacer_hi.ts
 @@ -207,7 +207,7 @@
@@ -6991,7 +6879,7 @@ index 9533734..85ed976 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>डैशबोर्ड</translation>
      </message>
@@ -7013,6 +6901,11 @@ index 9533734..85ed976 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -7042,28 +6935,13 @@ index 9533734..85ed976 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -7133,15 +7011,10 @@ index 9533734..85ed976 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>खोज...</translation>
      </message>
      <message>
@@ -7421,7 +7294,7 @@ index 9533734..85ed976 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -7450,7 +7323,7 @@ index 9533734..85ed976 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 आकार की फ़ाइलों को साफ किया गया.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>स्थापना रद्द करें चयनित</translation>
      </message>
      <message>
@@ -7474,7 +7347,7 @@ index 9533734..85ed976 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_hu.ts b/translations/stacer_hu.ts
-index d7165cf..460c491 100644
+index d7165cf..46511fe 100644
 --- a/translations/stacer_hu.ts
 +++ b/translations/stacer_hu.ts
 @@ -207,7 +207,7 @@
@@ -7634,7 +7507,7 @@ index d7165cf..460c491 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Vezérlőpult</translation>
      </message>
@@ -7656,6 +7529,11 @@ index d7165cf..460c491 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU Használatának Előzményei</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>CPU Terhelésátlagainak Előzményei</translation>
@@ -7685,28 +7563,13 @@ index d7165cf..460c491 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -7776,15 +7639,10 @@ index d7165cf..460c491 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Keresés...</translation>
      </message>
      <message>
@@ -8064,7 +7922,7 @@ index d7165cf..460c491 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Név</translation>
      </message>
      <message>
@@ -8093,7 +7951,7 @@ index d7165cf..460c491 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 kitisztítva.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Kiválasztott Program Eltávolítása</translation>
      </message>
      <message>
@@ -8117,7 +7975,7 @@ index d7165cf..460c491 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_it.ts b/translations/stacer_it.ts
-index 5d47756..5d221a4 100644
+index 5d47756..d56b0ea 100644
 --- a/translations/stacer_it.ts
 +++ b/translations/stacer_it.ts
 @@ -207,7 +207,7 @@
@@ -8277,7 +8135,7 @@ index 5d47756..5d221a4 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Dashboard</translation>
      </message>
@@ -8299,6 +8157,11 @@ index 5d47756..5d221a4 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Cronologia GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Cronologia Carico Medio della CPU</translation>
@@ -8328,28 +8191,13 @@ index 5d47756..5d221a4 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -8419,15 +8267,10 @@ index 5d47756..5d221a4 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Cerca...</translation>
      </message>
      <message>
@@ -8707,7 +8550,7 @@ index 5d47756..5d221a4 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nome</translation>
      </message>
      <message>
@@ -8736,7 +8579,7 @@ index 5d47756..5d221a4 100644
          <source>%1 size files cleaned.</source>
          <translation>Dimensione file puliti %1.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Disinstalla Selezionati</translation>
      </message>
      <message>
@@ -8760,7 +8603,7 @@ index 5d47756..5d221a4 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_kn.ts b/translations/stacer_kn.ts
-index 2fec5af..7ac8e88 100644
+index 2fec5af..f56bfc5 100644
 --- a/translations/stacer_kn.ts
 +++ b/translations/stacer_kn.ts
 @@ -207,7 +207,7 @@
@@ -8920,7 +8763,7 @@ index 2fec5af..7ac8e88 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>ಡ್ಯಾಶ್ಬೋರ್ಡ್</translation>
      </message>
@@ -8942,6 +8785,11 @@ index 2fec5af..7ac8e88 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -8971,28 +8819,13 @@ index 2fec5af..7ac8e88 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -9062,15 +8895,10 @@ index 2fec5af..7ac8e88 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>ಹುಡುಕು...</translation>
      </message>
      <message>
@@ -9350,7 +9178,7 @@ index 2fec5af..7ac8e88 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -9379,7 +9207,7 @@ index 2fec5af..7ac8e88 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 ಗಾತ್ರದ ಫೈಲ್ಗಳನ್ನು ಸ್ವಚ್ಛಗೊಳಿಸಲಾಗಿದೆ.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>ಆಯ್ಕೆಮಾಡಿದನ್ನು ಅಸ್ಥಾಪಿಸು</translation>
      </message>
      <message>
@@ -9403,7 +9231,7 @@ index 2fec5af..7ac8e88 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_ko.ts b/translations/stacer_ko.ts
-index 17bea8b..544c8e5 100644
+index 17bea8b..2d9cd55 100644
 --- a/translations/stacer_ko.ts
 +++ b/translations/stacer_ko.ts
 @@ -207,7 +207,7 @@
@@ -9563,7 +9391,7 @@ index 17bea8b..544c8e5 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>대시보드</translation>
      </message>
@@ -9585,6 +9413,11 @@ index 17bea8b..544c8e5 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -9614,28 +9447,13 @@ index 17bea8b..544c8e5 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -9705,15 +9523,10 @@ index 17bea8b..544c8e5 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>검색...</translation>
      </message>
      <message>
@@ -9993,7 +9806,7 @@ index 17bea8b..544c8e5 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>이름</translation>
      </message>
      <message>
@@ -10022,7 +9835,7 @@ index 17bea8b..544c8e5 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 크기의 파일이 제거됨.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>선택된 프로그램 제거</translation>
      </message>
      <message>
@@ -10046,7 +9859,7 @@ index 17bea8b..544c8e5 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_ml.ts b/translations/stacer_ml.ts
-index 40b86a3..d499ee9 100644
+index 40b86a3..409791e 100644
 --- a/translations/stacer_ml.ts
 +++ b/translations/stacer_ml.ts
 @@ -207,7 +207,7 @@
@@ -10206,7 +10019,7 @@ index 40b86a3..d499ee9 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>അവലോകനം</translation>
      </message>
@@ -10228,6 +10041,11 @@ index 40b86a3..d499ee9 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>ജിപിയു ചരിത്രം</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>സിപിയു ലോഡ് ശരാശരികളുടെ ചരിത്രം</translation>
@@ -10257,28 +10075,13 @@ index 40b86a3..d499ee9 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -10348,15 +10151,10 @@ index 40b86a3..d499ee9 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>തിരയുക...</translation>
      </message>
      <message>
@@ -10636,7 +10434,7 @@ index 40b86a3..d499ee9 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>പേര്</translation>
      </message>
      <message>
@@ -10665,7 +10463,7 @@ index 40b86a3..d499ee9 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 വലിപ്പമുള്ള ഫയലുകൾ വൃത്തിയാക്കി.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>തെരഞ്ഞെടുത്തവ ഒഴിവാക്കാകുക</translation>
      </message>
      <message>
@@ -10689,7 +10487,7 @@ index 40b86a3..d499ee9 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_nl.ts b/translations/stacer_nl.ts
-index d17f0c4..d338d9b 100644
+index d17f0c4..7951750 100644
 --- a/translations/stacer_nl.ts
 +++ b/translations/stacer_nl.ts
 @@ -207,7 +207,7 @@
@@ -10849,7 +10647,7 @@ index d17f0c4..d338d9b 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Overzicht</translation>
      </message>
@@ -10871,6 +10669,11 @@ index d17f0c4..d338d9b 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU-geschiedenis</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Geschiedenis van gemiddelde CPU-laadtijden</translation>
@@ -10900,28 +10703,13 @@ index d17f0c4..d338d9b 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -10991,15 +10779,10 @@ index d17f0c4..d338d9b 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Zoeken...</translation>
      </message>
      <message>
@@ -11279,7 +11062,7 @@ index d17f0c4..d338d9b 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Naam</translation>
      </message>
      <message>
@@ -11308,7 +11091,7 @@ index d17f0c4..d338d9b 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 bestanden opgeschoond.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Geselecteerde pakketten verwijderen</translation>
      </message>
      <message>
@@ -11332,7 +11115,7 @@ index d17f0c4..d338d9b 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_oc.ts b/translations/stacer_oc.ts
-index 6786496..255e475 100644
+index 6786496..4387daa 100644
 --- a/translations/stacer_oc.ts
 +++ b/translations/stacer_oc.ts
 @@ -207,7 +207,7 @@
@@ -11492,7 +11275,7 @@ index 6786496..255e475 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Panèl de configuracion</translation>
      </message>
@@ -11514,6 +11297,11 @@ index 6786496..255e475 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -11543,28 +11331,13 @@ index 6786496..255e475 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -11634,15 +11407,10 @@ index 6786496..255e475 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -11922,7 +11690,7 @@ index 6786496..255e475 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -11951,7 +11719,7 @@ index 6786496..255e475 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 de fichièr netejat</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstallar la seleccion</translation>
      </message>
      <message>
@@ -11975,7 +11743,7 @@ index 6786496..255e475 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_pl.ts b/translations/stacer_pl.ts
-index 4c0656e..6b51b52 100644
+index 4c0656e..9776c4c 100644
 --- a/translations/stacer_pl.ts
 +++ b/translations/stacer_pl.ts
 @@ -207,7 +207,7 @@
@@ -12135,7 +11903,7 @@ index 4c0656e..6b51b52 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Deska rozdzielcza</translation>
      </message>
@@ -12157,6 +11925,11 @@ index 4c0656e..6b51b52 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Historia użycia GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historia średniego wykorzystania CPU</translation>
@@ -12186,28 +11959,13 @@ index 4c0656e..6b51b52 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -12277,15 +12035,10 @@ index 4c0656e..6b51b52 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -12565,7 +12318,7 @@ index 4c0656e..6b51b52 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Imię</translation>
      </message>
      <message>
@@ -12594,7 +12347,7 @@ index 4c0656e..6b51b52 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 rozmiar wyczyszczonych plików</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Usuń zaznaczone</translation>
      </message>
      <message>
@@ -12618,7 +12371,7 @@ index 4c0656e..6b51b52 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_pt.ts b/translations/stacer_pt.ts
-index 76e9aac..71b2a03 100644
+index 76e9aac..e823fe4 100644
 --- a/translations/stacer_pt.ts
 +++ b/translations/stacer_pt.ts
 @@ -207,7 +207,7 @@
@@ -12778,7 +12531,7 @@ index 76e9aac..71b2a03 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Visão geral</translation>
      </message>
@@ -12800,6 +12553,11 @@ index 76e9aac..71b2a03 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Histórico do GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Histórico da Taxa de Carregamento do CPU</translation>
@@ -12829,28 +12587,13 @@ index 76e9aac..71b2a03 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -12920,15 +12663,10 @@ index 76e9aac..71b2a03 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Pesquisar...</translation>
      </message>
      <message>
@@ -13208,7 +12946,7 @@ index 76e9aac..71b2a03 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nome</translation>
      </message>
      <message>
@@ -13237,7 +12975,7 @@ index 76e9aac..71b2a03 100644
          <source>%1 size files cleaned.</source>
          <translation>ficheiros de tamanho %1 limpos.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Desinstalar Selecionados</translation>
      </message>
      <message>
@@ -13261,7 +12999,7 @@ index 76e9aac..71b2a03 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_ro.ts b/translations/stacer_ro.ts
-index 5de72e0..64d8d9b 100644
+index 5de72e0..62e314b 100644
 --- a/translations/stacer_ro.ts
 +++ b/translations/stacer_ro.ts
 @@ -207,7 +207,7 @@
@@ -13421,7 +13159,7 @@ index 5de72e0..64d8d9b 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Tablou de Bord</translation>
      </message>
@@ -13443,6 +13181,11 @@ index 5de72e0..64d8d9b 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>Istoricul GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Istoricul Mediilor de Încărcare a Procesorului</translation>
@@ -13472,28 +13215,13 @@ index 5de72e0..64d8d9b 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -13563,15 +13291,10 @@ index 5de72e0..64d8d9b 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Căutare...</translation>
      </message>
      <message>
@@ -13851,7 +13574,7 @@ index 5de72e0..64d8d9b 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Nume</translation>
      </message>
      <message>
@@ -13880,7 +13603,7 @@ index 5de72e0..64d8d9b 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 dimensiune fișiere curățate</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Dezinstalați Selectate</translation>
      </message>
      <message>
@@ -13904,7 +13627,7 @@ index 5de72e0..64d8d9b 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_ru.ts b/translations/stacer_ru.ts
-index 243744c..8627d2f 100644
+index 243744c..304d639 100644
 --- a/translations/stacer_ru.ts
 +++ b/translations/stacer_ru.ts
 @@ -207,7 +207,7 @@
@@ -14064,7 +13787,7 @@ index 243744c..8627d2f 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Обзор</translation>
      </message>
@@ -14086,6 +13809,11 @@ index 243744c..8627d2f 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>История GPU</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>История средней загрузки процессора</translation>
@@ -14115,28 +13843,13 @@ index 243744c..8627d2f 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -14206,15 +13919,10 @@ index 243744c..8627d2f 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Поиск...</translation>
      </message>
      <message>
@@ -14494,7 +14202,7 @@ index 243744c..8627d2f 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation>Найдено файлов: %1. Из них показано: %2.</translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Имя</translation>
      </message>
      <message>
@@ -14523,7 +14231,7 @@ index 243744c..8627d2f 100644
          <source>%1 size files cleaned.</source>
          <translation>Освобождено %1.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Удалить выбранные</translation>
      </message>
      <message>
@@ -14547,7 +14255,7 @@ index 243744c..8627d2f 100644
          <translation>Удалить выбранные (%1)</translation>
      </message>
 diff --git a/translations/stacer_sv.ts b/translations/stacer_sv.ts
-index 6295e1d..bab6883 100644
+index 6295e1d..77bb57d 100644
 --- a/translations/stacer_sv.ts
 +++ b/translations/stacer_sv.ts
 @@ -207,7 +207,7 @@
@@ -14707,7 +14415,7 @@ index 6295e1d..bab6883 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Instrumentpanel</translation>
      </message>
@@ -14729,6 +14437,11 @@ index 6295e1d..bab6883 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU-historik</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>Historik över processorns medelbelastning</translation>
@@ -14758,28 +14471,13 @@ index 6295e1d..bab6883 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -14849,15 +14547,10 @@ index 6295e1d..bab6883 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Sök...</translation>
      </message>
      <message>
@@ -15137,7 +14830,7 @@ index 6295e1d..bab6883 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation>%1 filer hittades. Visar %2 av dem.</translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>Namn</translation>
      </message>
      <message>
@@ -15166,7 +14859,7 @@ index 6295e1d..bab6883 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 filer togs bort.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Avinstallera markerat</translation>
      </message>
      <message>
@@ -15190,7 +14883,7 @@ index 6295e1d..bab6883 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_tr.ts b/translations/stacer_tr.ts
-index 60f565b..0a647d8 100644
+index 60f565b..f3e099a 100644
 --- a/translations/stacer_tr.ts
 +++ b/translations/stacer_tr.ts
 @@ -207,7 +207,7 @@
@@ -15350,7 +15043,7 @@ index 60f565b..0a647d8 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Genel</translation>
      </message>
@@ -15372,6 +15065,11 @@ index 60f565b..0a647d8 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU Geçmişi</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>CPU Yük Ortalamaları Geçmişi</translation>
@@ -15401,28 +15099,13 @@ index 60f565b..0a647d8 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -15492,15 +15175,10 @@ index 60f565b..0a647d8 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Arama...</translation>
      </message>
      <message>
@@ -15780,7 +15458,7 @@ index 60f565b..0a647d8 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>İsim</translation>
      </message>
      <message>
@@ -15809,7 +15487,7 @@ index 60f565b..0a647d8 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 boyutunda dosya temizlendi.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Seçilenleri Kaldır</translation>
      </message>
      <message>
@@ -15833,7 +15511,7 @@ index 60f565b..0a647d8 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_uk.ts b/translations/stacer_uk.ts
-index 5c50394..aa6117a 100644
+index 5c50394..389b3b1 100644
 --- a/translations/stacer_uk.ts
 +++ b/translations/stacer_uk.ts
 @@ -207,7 +207,7 @@
@@ -15993,7 +15671,7 @@ index 5c50394..aa6117a 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Огляд</translation>
      </message>
@@ -16015,6 +15693,11 @@ index 5c50394..aa6117a 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -16044,28 +15727,13 @@ index 5c50394..aa6117a 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -16135,15 +15803,10 @@ index 5c50394..aa6117a 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Пошук...</translation>
      </message>
      <message>
@@ -16423,7 +16086,7 @@ index 5c50394..aa6117a 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -16452,7 +16115,7 @@ index 5c50394..aa6117a 100644
          <source>%1 size files cleaned.</source>
          <translation>Звільнено %1.</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Видалити вибрані</translation>
      </message>
      <message>
@@ -16476,7 +16139,7 @@ index 5c50394..aa6117a 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_vi.ts b/translations/stacer_vi.ts
-index e52ce02..5f798fc 100644
+index e52ce02..c553999 100644
 --- a/translations/stacer_vi.ts
 +++ b/translations/stacer_vi.ts
 @@ -207,7 +207,7 @@
@@ -16636,7 +16299,7 @@ index e52ce02..5f798fc 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>Bảng Điều Khiển</translation>
      </message>
@@ -16658,6 +16321,11 @@ index e52ce02..5f798fc 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -16687,28 +16355,13 @@ index e52ce02..5f798fc 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -16778,15 +16431,10 @@ index e52ce02..5f798fc 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>Tìm Kiếm...</translation>
      </message>
      <message>
@@ -17066,7 +16714,7 @@ index e52ce02..5f798fc 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -17095,7 +16743,7 @@ index e52ce02..5f798fc 100644
          <source>%1 size files cleaned.</source>
          <translation>%1 Kích Cỡ Tập Tin Được Làm Sạch</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>Gỡ Bỏ Gói Đã Chọn</translation>
      </message>
      <message>
@@ -17119,7 +16767,7 @@ index e52ce02..5f798fc 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_zh-cn.ts b/translations/stacer_zh-cn.ts
-index ea8cbf4..a00b280 100644
+index ea8cbf4..441072c 100644
 --- a/translations/stacer_zh-cn.ts
 +++ b/translations/stacer_zh-cn.ts
 @@ -207,7 +207,7 @@
@@ -17279,7 +16927,7 @@ index ea8cbf4..a00b280 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>仪表盘</translation>
      </message>
@@ -17301,6 +16949,11 @@ index ea8cbf4..a00b280 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation>GPU历史</translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation>CPU平均负载历史记录</translation>
@@ -17330,29 +16983,14 @@ index ea8cbf4..a00b280 100644
 +        <translation>温度与负载监控</translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation>CPU 温度</translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
 +        <source>GPU Temperature</source>
 +        <translation>GPU 温度</translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
-+        <translation>GPU 占用</translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
 +        <translation>GPU 频率</translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
-+        <translation>硬盘温度</translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="148"/>
@@ -17421,15 +17059,10 @@ index ea8cbf4..a00b280 100644
 +        <source>N/A</source>
 +        <translation>N/A</translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation>N/A（需 root 或 smartctl）</translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -17709,7 +17342,7 @@ index ea8cbf4..a00b280 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation>姓名</translation>
      </message>
      <message>
@@ -17738,7 +17371,7 @@ index ea8cbf4..a00b280 100644
          <source>%1 size files cleaned.</source>
          <translation>已经清理文件%1。</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>卸载选中项</translation>
      </message>
      <message>
@@ -17762,7 +17395,7 @@ index ea8cbf4..a00b280 100644
          <translation type="unfinished"></translation>
      </message>
 diff --git a/translations/stacer_zh-tw.ts b/translations/stacer_zh-tw.ts
-index 493e415..00fd7c4 100644
+index 493e415..438ceed 100644
 --- a/translations/stacer_zh-tw.ts
 +++ b/translations/stacer_zh-tw.ts
 @@ -207,7 +207,7 @@
@@ -17922,7 +17555,7 @@ index 493e415..00fd7c4 100644
      <message>
          <location filename="../stacer/Pages/Processes/processes_page.cpp" line="31"/>
          <source>Nice</source>
-@@ -725,84 +761,134 @@
+@@ -725,84 +761,119 @@
          <source>Dashboard</source>
          <translation>儀表板</translation>
      </message>
@@ -17944,6 +17577,11 @@ index 493e415..00fd7c4 100644
      </message>
      <message>
 -        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="15"/>
++        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="21"/>
++        <source>History of GPU</source>
++        <translation type="unfinished"></translation>
++    </message>
++    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="17"/>
          <source>History of CPU Load Averages</source>
          <translation type="unfinished"></translation>
@@ -17973,28 +17611,13 @@ index 493e415..00fd7c4 100644
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="73"/>
-+        <source>CPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="74"/>
-+        <source>GPU Temperature</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="75"/>
-+        <source>GPU Usage</source>
++        <source>GPU Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
 +        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="76"/>
 +        <source>GPU Frequency</source>
-+        <translation type="unfinished"></translation>
-+    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="78"/>
-+        <source>Disk Temperature</source>
 +        <translation type="unfinished"></translation>
 +    </message>
 +    <message>
@@ -18064,15 +17687,10 @@ index 493e415..00fd7c4 100644
 +        <source>N/A</source>
 +        <translation type="unfinished"></translation>
 +    </message>
-+    <message>
-+        <location filename="../stacer/Pages/Resources/resources_page.cpp" line="467"/>
-+        <source>N/A (root or smartctl required)</source>
-+        <translation type="unfinished"></translation>
-+    </message>
      <message>
          <location filename="../stacer/Pages/Resources/resources_page.ui" line="14"/>
          <source>Resources</source>
-@@ -827,229 +913,229 @@
+@@ -827,229 +898,229 @@
          <translation>搜尋...</translation>
      </message>
      <message>
@@ -18352,7 +17970,7 @@ index 493e415..00fd7c4 100644
          <source>%1 files found. Showing %2 of them.</source>
          <translation type="unfinished"></translation>
      </message>
-@@ -1377,24 +1463,24 @@
+@@ -1377,24 +1448,24 @@
          <translation type="unfinished"></translation>
      </message>
      <message>
@@ -18381,7 +17999,7 @@ index 493e415..00fd7c4 100644
          <source>%1 size files cleaned.</source>
          <translation>已清除 %1 的空間</translation>
      </message>
-@@ -1433,18 +1519,18 @@
+@@ -1433,18 +1504,18 @@
          <translation>解除安裝選中的項目</translation>
      </message>
      <message>
