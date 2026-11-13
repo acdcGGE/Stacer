@@ -10,6 +10,7 @@ int main()
     qDebug() << "GPU temp (C):" << s.getGpuTemp();
     qDebug() << "GPU usage (%):" << s.getGpuUsage();
     qDebug() << "GPU clock (MHz):" << s.getGpuClock();
+    qDebug() << "GPU mem clock (MHz):" << s.getGpuMemClock();
 
     QList<TempReading> disks = s.getDiskTemperatures();
     qDebug() << "Disk temps:" << disks.size();

@@ -7,8 +7,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../scripts/common.sh"
 DIST="${1:-$DIST_DIR}"
 [[ -x "$DIST/bin/stacer" ]] || { echo "ERROR: run ./build.sh first" >&2; exit 1; }
 
-PKG="$PORT_ROOT/.packaging/stacer_${UPSTREAM_VERSION}-4_${TARGET_ARCH}"
-DEB="$PORT_ROOT/dist/stacer_${UPSTREAM_VERSION}-4_${TARGET_ARCH}.deb"
+PKG="$PORT_ROOT/.packaging/stacer_${UPSTREAM_VERSION}-5_${TARGET_ARCH}"
+DEB="$PORT_ROOT/dist/stacer_${UPSTREAM_VERSION}-5_${TARGET_ARCH}.deb"
 rm -rf "$PKG"
 mkdir -p "$PKG/DEBIAN" "$PKG/usr"
 
@@ -16,7 +16,7 @@ cp -a "$DIST/bin" "$DIST/share" "$PKG/usr/"
 
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: stacer
-Version: $UPSTREAM_VERSION-4
+Version: $UPSTREAM_VERSION-5
 Section: utils
 Priority: optional
 Architecture: $TARGET_ARCH

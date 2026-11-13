@@ -1,5 +1,5 @@
 {
-  "elf": "ELF 64-bit LSB pie executable, LoongArch, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-loongarch-lp64d.so.1, BuildID[sha1]=b37de4e09a72184dfc23081c1e61c561bf0a2302, for GNU/Linux 5.19.0, not stripped",
+  "elf": "ELF 64-bit LSB pie executable, LoongArch, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-loongarch-lp64d.so.1, BuildID[sha1]=9dc871853405db9d91be75648c9a0dcac1d2177b, for GNU/Linux 5.19.0, not stripped",
   "elfArchLoongArch": "pass",
   "dynamicDepsResolved": "pass",
   "cpuInfoProbe": "pass",

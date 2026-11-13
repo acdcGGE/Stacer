@@ -142,8 +142,8 @@ Deepin 25 loong64 源里 `libqt6opengl6-dev` 的**候选版本为「无」**（`
 | 3 | `nvidia-smi` | NVIDIA 专有驱动 |
 | 4 | `radeontop -d - -l 1` | 老 radeon/amdgpu 兜底（需安装） |
 
-- **GPU 显存 / 频率**：amdgpu 读 `mem_info_vram_used/_total` 与 hwmon `freq*_input`（radeon 报 Hz、amdgpu 报 kHz，统一换算 MHz）；NVIDIA 走 `nvidia-smi`。
-- **UI**：Dashboard 新增 GPU 圆环（与 CPU/内存/磁盘同列）；Resources 页新增 GPU 占用历史曲线（与 CPU 曲线同款、60 秒窗口），温度面板只保留 GPU 温度/频率两行 —— CPU 温度与磁盘温度不再上页面，传感器层 API 与探针仍保留完整读取能力；都挂在页面已有的 1 秒 `QTimer` 上实时刷新。
+- **GPU 显存 / 频率 / 显存频率**：amdgpu 读 `mem_info_vram_used/_total` 与 hwmon `freq*_input`（radeon 报 Hz、amdgpu 报 kHz，统一换算 MHz），显存频率取 `mclk` 标签的 freq 通道，无 hwmon mclk 的旧机器回退 `pp_dpm_mclk` 当前档；NVIDIA 走 `nvidia-smi`（`clocks.current.graphics` / `clocks.current.memory`）。
+- **UI**：Dashboard 新增 GPU 圆环（与 CPU/内存/磁盘同列）；Resources 页新增 GPU 占用历史曲线（与 CPU 曲线同款、60 秒窗口），温度面板显示 GPU 温度/频率/显存频率三行 —— CPU 温度与磁盘温度不再上页面，传感器层 API 与探针仍保留完整读取能力；都挂在页面已有的 1 秒 `QTimer` 上实时刷新。
 
 **为什么需要 fdinfo 回退**：本机 Oland（GCN 1.0 / SI）的 amdgpu 用旧式 DPM，`gpu_busy_percent` 读取返回 `EOPNOTSUPP`（内核未实现 `GPU_LOAD` 查询），顺序 1 永远失败。fdinfo 方案对每个进程的 DRM fd 统计引擎占用纳秒数，两次采样差值 ÷ 时间差即占用率。两个关键细节：
 
@@ -152,7 +152,7 @@ Deepin 25 loong64 源里 `libqt6opengl6-dev` 的**候选版本为「无」**（`
 
 采样状态用 `QElapsedTimer` 维护：首次调用内置 100ms 种子采样，之后每次调用按真实经过时间算差值，不假设调用间隔。实测空闲 ≈0%、`glxgears` 负载下 35–46% 随窗口大小变化，Dashboard 圆环逐秒跳动（窗口截图对照验证）。
 
-探针测试：`tests/run-sensors.sh`（链接 `libstacer-core.a`，打印 CPU/GPU 温度、GPU 占用/频率、磁盘温度列表）。
+探针测试：`tests/run-sensors.sh`（链接 `libstacer-core.a`，打印 CPU/GPU 温度、GPU 占用/频率/显存频率、磁盘温度列表）。
 
 ### 依赖准备的坑（脚本里已处理）
 
@@ -187,7 +187,7 @@ Deepin 25 loong64 源里 `libqt6opengl6-dev` 的**候选版本为「无」**（`
 ./packaging/make-deb.sh    # 免 root，dpkg-deb 直接构建
 ```
 
-产出 `dist/stacer_1.8.0-4_loong64.deb`（当前在 Debian sid / Qt 6.11.2 上构建）。这是开发预览包，`Depends` 为手写列表，但已按二进制实测的 ELF 需求加了下限：`libc6 (>= 2.36)`、各 `libqt6* (>= 6.11.0~)`，并补齐了 NEEDED 里原先漏掉的 `libqt6opengl6` / `libglx0` / `libopengl0`；`qt6-wayland`、`qt6-gtk-platformtheme` 降级为 `Recommends`（最小化系统没装也能安装）。**下限随编译机走**：在 Deepin（Qt 6.8）上重编后需用 `readelf -V dist/bin/stacer` 重测并把 `make-deb.sh` 里的下限同步改回 `6.8.0~`，否则包会拒绝安装在 Deepin 上。sid 的 t64 包名（`libqt6core6t64` 等）通过版本化 `Provides: libqt6core6 (= …)` 满足旧名依赖，无需改写。理由见下方「跨 Qt 版本兼容边界」。正式发布建议 `sudo apt install qt6-charts-dev qt6-tools-dev debhelper` 后用 `dpkg-buildpackage` 走 `debian/`（0003 补丁已修好 `control`），让 `dh_shlibdeps` 自动算依赖。
+产出 `dist/stacer_1.8.0-5_loong64.deb`（当前在 Debian sid / Qt 6.11.2 上构建）。这是开发预览包，`Depends` 为手写列表，但已按二进制实测的 ELF 需求加了下限：`libc6 (>= 2.36)`、各 `libqt6* (>= 6.11.0~)`，并补齐了 NEEDED 里原先漏掉的 `libqt6opengl6` / `libglx0` / `libopengl0`；`qt6-wayland`、`qt6-gtk-platformtheme` 降级为 `Recommends`（最小化系统没装也能安装）。**下限随编译机走**：在 Deepin（Qt 6.8）上重编后需用 `readelf -V dist/bin/stacer` 重测并把 `make-deb.sh` 里的下限同步改回 `6.8.0~`，否则包会拒绝安装在 Deepin 上。sid 的 t64 包名（`libqt6core6t64` 等）通过版本化 `Provides: libqt6core6 (= …)` 满足旧名依赖，无需改写。理由见下方「跨 Qt 版本兼容边界」。正式发布建议 `sudo apt install qt6-charts-dev qt6-tools-dev debhelper` 后用 `dpkg-buildpackage` 走 `debian/`（0003 补丁已修好 `control`），让 `dh_shlibdeps` 自动算依赖。
 
 ### 2. 通用 Linux 便携包（`tar.gz`）
 
@@ -196,7 +196,7 @@ Deepin 25 loong64 源里 `libqt6opengl6-dev` 的**候选版本为「无」**（`
 ./packaging/make-portable.sh --bundle-charts # 附带 libQt6Charts.so.6
 ```
 
-产出两个包（各带 `.sha256`）：`stacer-1.8.0-loong64-linux-portable.tar.gz`（860K，纯二进制）与 `...-portable-bundled.tar.gz`（1.7M，自带 `libQt6Charts.so.6`）。解压执行 `./stacer-run.sh` 即可：脚本自动在常见 multiarch 路径探测 `libQt6Charts.so.6`、按 `WAYLAND_DISPLAY`/`DISPLAY` 选择 QPA 插件，并给出各发行版缺包时的安装提示。目标系统只需有 Qt6 Base/Charts/Svg 与对应平台插件。包内 `README-portable.txt` 的 Qt/glibc 下限与动画说明在打包时**从二进制 ELF 动态生成**，换编译机不会说过时的话。
+产出两个包（各带 `.sha256`）：`stacer-1.8.0-loong64-linux-portable.tar.gz`（864K，纯二进制）与 `...-portable-bundled.tar.gz`（1.7M，自带 `libQt6Charts.so.6`）。解压执行 `./stacer-run.sh` 即可：脚本自动在常见 multiarch 路径探测 `libQt6Charts.so.6`、按 `WAYLAND_DISPLAY`/`DISPLAY` 选择 QPA 插件，并给出各发行版缺包时的安装提示。目标系统只需有 Qt6 Base/Charts/Svg 与对应平台插件。包内 `README-portable.txt` 的 Qt/glibc 下限与动画说明在打包时**从二进制 ELF 动态生成**，换编译机不会说过时的话。
 
 两种包都已实测启动存活 5 秒；其中 **bundled 版在完全不设置 `LD_LIBRARY_PATH` 的环境下也能启动**，适合目标机没装 `qt6-charts` 的场景。
 
